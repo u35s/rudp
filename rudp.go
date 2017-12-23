@@ -54,6 +54,54 @@ type Package struct {
 	Bts  []byte
 }
 
+func (tmp *packageBuffer) packRequest(id, tag int) {
+	if tmp.tmp.Len()+3 > GENERAL_PACKAGE {
+		tmp.newPackage()
+	}
+	tmp.fillHeader(tag, id)
+}
+
+func (tmp *packageBuffer) fillHeader(head, id int) {
+	if head < 128 {
+		tmp.tmp.WriteByte(byte(head))
+	} else {
+		tmp.tmp.WriteByte(byte(((head & 0x7f00) >> 8) | 0x80))
+		tmp.tmp.WriteByte(byte(head & 0xff))
+	}
+	tmp.tmp.WriteByte(byte((id & 0xff00) >> 8))
+	tmp.tmp.WriteByte(byte(id & 0xff))
+}
+
+func (tmp *packageBuffer) packMessage(m *message) {
+	if m.buf.Len()+4 > GENERAL_PACKAGE {
+		if tmp.tmp.Len() > 0 {
+			tmp.newPackage()
+			tmp.tmp.Reset()
+		}
+		tmp.fillHeader(m.buf.Len()+TYPE_NORMAL, m.id)
+		tmp.tmp.Write(m.buf.Bytes())
+		tmp.newPackage()
+	}
+	if m.buf.Len()+4+tmp.tmp.Len() > GENERAL_PACKAGE {
+		tmp.newPackage()
+	}
+	tmp.fillHeader(m.buf.Len()+TYPE_NORMAL, m.id)
+	tmp.tmp.Write(m.buf.Bytes())
+}
+
+func (tmp *packageBuffer) newPackage() {
+	p := &Package{Bts: make([]byte, tmp.tmp.Len())}
+	copy(p.Bts, tmp.tmp.Bytes())
+	tmp.tmp.Reset()
+	if tmp.tail == nil {
+		tmp.head = p
+		tmp.tail = p
+	} else {
+		tmp.tail.Next = p
+		tmp.tail = p
+	}
+}
+
 var corruptTick int = 5
 var expiredTick int = 1024
 var sendDelayTick int = 1
@@ -77,8 +125,6 @@ type Rudp struct {
 
 	sendQueue    messageQueue
 	sendHistory  messageQueue
-	sendFreeList messageQueue
-	sendAgain    array
 	addSendAgain chan int
 	sendID       int
 
@@ -142,91 +188,6 @@ func (this *Rudp) Update(tick int) *Package {
 	return nil
 }
 
-func assert(b bool) {}
-
-type array struct {
-	cap  int
-	len  int
-	data []int
-}
-
-func (this *array) insert(id int) {
-	var i int
-	for i = 0; i < this.len; i++ {
-		if this.data[i] == id {
-			return
-		} else if this.data[i] > id {
-			break
-		}
-	}
-	if this.len >= this.cap {
-		if this.cap == 0 {
-			this.cap = 16
-		} else {
-			this.cap *= 2
-		}
-		tmp := make([]int, this.cap)
-		copy(tmp, this.data)
-		this.data = tmp
-	}
-	var j int
-	for j = this.len; j > i; j-- {
-		this.data[j] = this.data[j-1]
-	}
-	log.Printf("send again insert %v,cur %v,data len %v", i, this.len, len(this.data))
-	this.data[i] = id
-	this.len++
-}
-
-func packRequest(tmp *tmpBuffer, id, tag int) {
-	if tmp.tmp.Len()+3 > GENERAL_PACKAGE {
-		newPackage(tmp, tmp.tmp.Bytes())
-	}
-	fillHeader(&tmp.tmp, tag, id)
-}
-
-func packMessage(tmp *tmpBuffer, m *message) {
-	if m.buf.Len()+4 > GENERAL_PACKAGE {
-		if tmp.tmp.Len() > 0 {
-			newPackage(tmp, tmp.tmp.Bytes())
-			tmp.tmp.Reset()
-		}
-		buf := bytes.Buffer{}
-		fillHeader(&buf, m.buf.Len()+TYPE_NORMAL, m.id)
-		buf.Write(m.buf.Bytes())
-		newPackage(tmp, buf.Bytes())
-	}
-	if m.buf.Len()+4+tmp.tmp.Len() > GENERAL_PACKAGE {
-		newPackage(tmp, tmp.tmp.Bytes())
-		tmp.tmp.Reset()
-	}
-	fillHeader(&tmp.tmp, m.buf.Len()+TYPE_NORMAL, m.id)
-	tmp.tmp.Write(m.buf.Bytes())
-}
-
-func fillHeader(buf *bytes.Buffer, len, id int) {
-	if len < 128 {
-		buf.WriteByte(byte(len))
-	} else {
-		buf.WriteByte(byte(((len & 0x7f00) >> 8) | 0x80))
-		buf.WriteByte(byte(len & 0xff))
-	}
-	buf.WriteByte(byte((id & 0xff00) >> 8))
-	buf.WriteByte(byte(id & 0xff))
-}
-
-func newPackage(tmp *tmpBuffer, bts []byte) {
-	p := &Package{Bts: make([]byte, len(bts))}
-	copy(p.Bts, bts)
-	if tmp.tail == nil {
-		tmp.head = p
-		tmp.tail = p
-	} else {
-		tmp.tail.Next = p
-		tmp.tail = p
-	}
-}
-
 type message struct {
 	next *message
 	buf  bytes.Buffer
@@ -272,7 +233,7 @@ func (this *messageQueue) push(m *message) {
 	}
 }
 
-type tmpBuffer struct {
+type packageBuffer struct {
 	tmp  bytes.Buffer
 	head *Package
 	tail *Package
@@ -295,7 +256,7 @@ func (this *Rudp) getID(max int, bt1, bt2 byte) int {
 }
 
 func (this *Rudp) genOutPackage() *Package {
-	var tmp tmpBuffer
+	var tmp packageBuffer
 	tmp.tmp.Grow(GENERAL_PACKAGE)
 	this.reqMissing(&tmp)
 	this.replyRequest(&tmp)
@@ -303,7 +264,7 @@ func (this *Rudp) genOutPackage() *Package {
 	if tmp.head == nil && tmp.tmp.Len() == 0 {
 		tmp.tmp.WriteByte(byte(TYPE_IGNORE))
 	}
-	newPackage(&tmp, tmp.tmp.Bytes())
+	tmp.newPackage()
 	return tmp.head
 }
 func (this *Rudp) Write(bts []byte) {
@@ -388,10 +349,10 @@ func (this *Rudp) insertMessage(id int, bts []byte) {
 	}
 }
 
-func (this *Rudp) sendMessage(tmp *tmpBuffer) {
+func (this *Rudp) sendMessage(tmp *packageBuffer) {
 	m := this.sendQueue.head
 	for m != nil {
-		packMessage(tmp, m)
+		tmp.packMessage(m)
 		m = m.next
 	}
 	if this.sendQueue.head != nil {
@@ -419,50 +380,46 @@ func (this *Rudp) clearSendExpired() {
 	}
 }
 
-func (this *Rudp) addRequest(id int) { this.addSendAgain <- id }
+func (this *Rudp) addRequest(id int) {
+	log.Printf("add request %v", id)
+	this.addSendAgain <- id
+}
 func (this *Rudp) addMissing(id int) {
 	log.Printf("add missing %v", id)
 	this.insertMessage(id, []byte{})
 }
 
-func (this *Rudp) replyRequest(tmp *tmpBuffer) {
-out:
+func (this *Rudp) replyRequest(tmp *packageBuffer) {
+
 	for {
 		select {
-		case add := <-this.addSendAgain:
-			this.sendAgain.insert(add)
-		default:
-			break out
-		}
-	}
-	history := this.sendHistory.head
-	for i := 0; i < this.sendAgain.len; i++ {
-		id := this.sendAgain.data[i]
-		if id < this.recvIDMin {
-			//already recv,ignore
-			log.Printf("already recv %v", id)
-			continue
-		}
-		for {
-			if history == nil || id < history.id {
-				//expired
-				log.Printf("send again miss %v", id)
-				packRequest(tmp, id, TYPE_MISSING)
-				break
-			} else if id == history.id {
-				log.Printf("send again %v", id)
-				packMessage(tmp, history)
-				break
+		case id := <-this.addSendAgain:
+			history := this.sendHistory.head
+			if id < this.recvIDMin {
+				//already recv,ignore
+				log.Printf("already recv %v", id)
+				continue
 			}
-			history = history.next
+			for {
+				if history == nil || id < history.id {
+					//expired
+					log.Printf("send again miss %v", id)
+					tmp.packRequest(id, TYPE_MISSING)
+					break
+				} else if id == history.id {
+					log.Printf("send again %v", id)
+					tmp.packMessage(history)
+					break
+				}
+				history = history.next
+			}
+		default:
+			return
 		}
 	}
-	this.sendAgain.data = this.sendAgain.data[:0]
-	this.sendAgain.len = 0
-	this.sendAgain.cap = 0
 }
 
-func (this *Rudp) reqMissing(tmp *tmpBuffer) {
+func (this *Rudp) reqMissing(tmp *packageBuffer) {
 	id := this.recvIDMin
 	m := this.recvQueue.head
 	for m != nil {
@@ -472,7 +429,7 @@ func (this *Rudp) reqMissing(tmp *tmpBuffer) {
 		if m.id > id {
 			for i := id; i < m.id; i++ {
 				log.Printf("req miss %v", i)
-				packRequest(tmp, i, TYPE_REQUEST)
+				tmp.packRequest(i, TYPE_REQUEST)
 			}
 		}
 		id = m.id + 1

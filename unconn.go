@@ -29,7 +29,7 @@ func (this *RudpUnConn) Close() error {
 	}
 	this.in <- []byte{TYPE_EOF}
 	_, err := this.conn.WriteToUDP([]byte{TYPE_CORRUPT}, this.remoteAddr)
-	CheckErr(err)
+	checkErr(err)
 	return err
 }
 

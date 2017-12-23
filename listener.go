@@ -23,7 +23,7 @@ type RudpListener struct {
 	rudpUnConnMap map[string]*RudpUnConn
 }
 
-//net listener interfac3
+//net listener interface
 func (this *RudpListener) Accept() (net.Conn, error) { return this.AcceptRudp() }
 func (this *RudpListener) Close() error {
 	this.CloseAllRudp()

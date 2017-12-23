@@ -2,7 +2,7 @@ package rudp
 
 import "log"
 
-func CheckErr(err error) {
+func checkErr(err error) {
 	if err != nil {
 		log.Printf("%v", err)
 	}

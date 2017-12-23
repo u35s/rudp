@@ -31,7 +31,7 @@ type RudpConn struct {
 
 func (this *RudpConn) Close() error {
 	_, err := this.conn.Write([]byte{TYPE_CORRUPT})
-	CheckErr(err)
+	checkErr(err)
 	return this.conn.Close()
 }
 
