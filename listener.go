@@ -71,7 +71,6 @@ func (this *RudpListener) run() {
 			this.rudpUnConnMap[remoteAddr.String()] = rudpUnConn
 			this.lock.Unlock()
 			this.newRudpUnConn <- rudpUnConn
-			go rudpUnConn.run()
 		}
 		bts := make([]byte, n)
 		copy(bts, data[:n])
