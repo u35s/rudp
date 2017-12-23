@@ -74,19 +74,19 @@ func main() {
 	udp.Send(t4)
 	dump(udp.Update(1)) //dump2
 	r1 := []byte{rudp.TYPE_REQUEST, 00, 00, rudp.TYPE_REQUEST, 00, 03}
-	udp.Write(r1)
+	udp.Input(r1)
 	dump(udp.Update(1)) //dump3
 	dumpRecv(udp)
 	r2 := []byte{rudp.TYPE_NORMAL + 1, 0, 1, 1,
 		rudp.TYPE_NORMAL + 1, 0, 3, 3}
-	udp.Write(r2)
+	udp.Input(r2)
 	dump(udp.Update(1)) //dump4
 	dumpRecv(udp)
 	r3 := []byte{rudp.TYPE_NORMAL + 1, 0, 0, 0,
 		rudp.TYPE_NORMAL + 1, 0, 5, 5}
-	udp.Write(r3)
+	udp.Input(r3)
 	r4 := []byte{rudp.TYPE_NORMAL + 1, 0, 2, 2}
-	udp.Write(r4)
+	udp.Input(r4)
 	dump(udp.Update(1)) //dump5
 	dumpRecv(udp)
 }

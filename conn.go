@@ -75,7 +75,7 @@ func (this *RudpConn) run() {
 				this.recvErr <- err
 				return
 			}
-			this.rudp.Write(data[:n])
+			this.rudp.Input(data[:n])
 			for {
 				n, err := this.rudp.Recv(data)
 				if err != nil {

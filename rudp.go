@@ -54,6 +54,12 @@ type Package struct {
 	Bts  []byte
 }
 
+type packageBuffer struct {
+	tmp  bytes.Buffer
+	head *Package
+	tail *Package
+}
+
 func (tmp *packageBuffer) packRequest(id, tag int) {
 	if tmp.tmp.Len()+3 > GENERAL_PACKAGE {
 		tmp.newPackage()
@@ -180,7 +186,7 @@ func (this *Rudp) Update(tick int) *Package {
 	}
 	if this.currentTick >= this.lastSendDelayTick+this.sendDelayTick {
 		this.lastSendDelayTick = this.currentTick
-		return this.genOutPackage()
+		return this.outPut()
 	}
 	if this.currentTick >= this.lastRecvTick+this.corruptTick {
 		this.corrupt = TYPE_CORRUPT_CORRUPT
@@ -193,13 +199,6 @@ type message struct {
 	buf  bytes.Buffer
 	id   int
 	tick int
-}
-
-func (this *message) reset() {
-	this.id = -1
-	this.tick = -1
-	this.next = nil
-	this.buf.Reset()
 }
 
 type messageQueue struct {
@@ -233,12 +232,6 @@ func (this *messageQueue) push(m *message) {
 	}
 }
 
-type packageBuffer struct {
-	tmp  bytes.Buffer
-	head *Package
-	tail *Package
-}
-
 func (this *Rudp) getID(max int, bt1, bt2 byte) int {
 	n1, n2 := int(bt1), int(bt2)
 	id := n1*256 + n2
@@ -255,7 +248,7 @@ func (this *Rudp) getID(max int, bt1, bt2 byte) int {
 	return id
 }
 
-func (this *Rudp) genOutPackage() *Package {
+func (this *Rudp) outPut() *Package {
 	var tmp packageBuffer
 	tmp.tmp.Grow(GENERAL_PACKAGE)
 	this.reqMissing(&tmp)
@@ -267,7 +260,8 @@ func (this *Rudp) genOutPackage() *Package {
 	tmp.newPackage()
 	return tmp.head
 }
-func (this *Rudp) Write(bts []byte) {
+
+func (this *Rudp) Input(bts []byte) {
 	sz := len(bts)
 	if sz > 0 {
 		this.lastRecvTick = this.currentTick
@@ -384,13 +378,13 @@ func (this *Rudp) addRequest(id int) {
 	log.Printf("add request %v", id)
 	this.addSendAgain <- id
 }
+
 func (this *Rudp) addMissing(id int) {
 	log.Printf("add missing %v", id)
 	this.insertMessage(id, []byte{})
 }
 
 func (this *Rudp) replyRequest(tmp *packageBuffer) {
-
 	for {
 		select {
 		case id := <-this.addSendAgain:

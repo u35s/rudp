@@ -43,7 +43,7 @@ func (this *RudpUnConn) run() {
 		for {
 			select {
 			case bts := <-this.in:
-				this.rudp.Write(bts)
+				this.rudp.Input(bts)
 				for {
 					n, err := this.rudp.Recv(data)
 					if err != nil {
