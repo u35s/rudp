@@ -11,9 +11,9 @@ var dumpIdx int
 func dumpRecv(U *rudp.Rudp) {
 	bts := make([]byte, rudp.MAX_PACKAGE)
 	for {
-		n := U.Recv(bts)
-		if n < 0 {
-			fmt.Println("corrput")
+		n, err := U.Recv(bts)
+		if err != nil {
+			fmt.Println(err)
 			break
 		} else if n == 0 {
 			break
@@ -42,7 +42,7 @@ func dump(p *rudp.Package) {
 
 func main() {
 	//fmt.Println("vim-go")
-	udp := rudp.New(1, 5)
+	udp := rudp.New()
 
 	t1 := []byte{1, 2, 3, 4}
 	t2 := []byte{5, 6, 7, 8}
@@ -68,22 +68,25 @@ func main() {
 
 	udp.Send(t1)
 	udp.Send(t2)
-	dump(udp.Update(nil, 1)) //dump0
-	dump(udp.Update(nil, 1)) //dump1
+	dump(udp.Update(1)) //dump0
+	dump(udp.Update(1)) //dump1
 	udp.Send(t3)
 	udp.Send(t4)
-	dump(udp.Update(nil, 1)) //dump2
-	r1 := []byte{02, 00, 00, 02, 00, 03}
-	dump(udp.Update(r1, 1)) //dump3
+	dump(udp.Update(1)) //dump2
+	r1 := []byte{rudp.TYPE_REQUEST, 00, 00, rudp.TYPE_REQUEST, 00, 03}
+	udp.Write(r1)
+	dump(udp.Update(1)) //dump3
 	dumpRecv(udp)
-	r2 := []byte{5, 0, 1, 1,
-		5, 0, 3, 3}
-	dump(udp.Update(r2, 1)) //dump4
+	r2 := []byte{rudp.TYPE_NORMAL + 1, 0, 1, 1,
+		rudp.TYPE_NORMAL + 1, 0, 3, 3}
+	udp.Write(r2)
+	dump(udp.Update(1)) //dump4
 	dumpRecv(udp)
-	r3 := []byte{5, 0, 0, 0,
-		5, 0, 5, 5}
-	dump(udp.Update(r3, 0)) //dump5
-	r4 := []byte{5, 0, 2, 2}
-	dump(udp.Update(r4, 1))
+	r3 := []byte{rudp.TYPE_NORMAL + 1, 0, 0, 0,
+		rudp.TYPE_NORMAL + 1, 0, 5, 5}
+	udp.Write(r3)
+	r4 := []byte{rudp.TYPE_NORMAL + 1, 0, 2, 2}
+	udp.Write(r4)
+	dump(udp.Update(1)) //dump5
 	dumpRecv(udp)
 }
