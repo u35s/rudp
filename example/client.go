@@ -13,6 +13,7 @@ import (
 
 func main() {
 	raddr := net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9981}
+	//raddr := net.UDPAddr{IP: net.ParseIP("47.89.180.105"), Port: 9981}
 	laddr := net.UDPAddr{IP: net.IPv4zero, Port: 0}
 	conn, err := net.DialUDP("udp", &laddr, &raddr)
 	if err != nil {
@@ -23,7 +24,7 @@ func main() {
 	defer func() { fmt.Println("defer close", rconn.Close()) }()
 	go func() {
 		bts := make([]byte, 1)
-		for i := 0; i < 255; i++ {
+		for i := uint8(0); ; i++ {
 			bts[0] = byte(i)
 			_, err := rconn.Write(bts)
 			if err != nil {
@@ -31,13 +32,13 @@ func main() {
 				os.Exit(1)
 				break
 			}
-			time.Sleep(1e9)
+			time.Sleep(1e5)
 		}
 	}()
 	go func() {
 		for {
 			rconn.Tick <- 1
-			time.Sleep(1e9)
+			time.Sleep(1e6)
 		}
 	}()
 	signalChan := make(chan os.Signal, 1)

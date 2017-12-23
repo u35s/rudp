@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -15,7 +16,7 @@ func read(conn *rudp.RudpUnConn) {
 	go func() {
 		for {
 			conn.Tick <- 1
-			time.Sleep(1e9)
+			time.Sleep(1e6)
 		}
 	}()
 	for {
@@ -25,15 +26,19 @@ func read(conn *rudp.RudpUnConn) {
 			fmt.Printf("read err %s\n", err)
 			break
 		}
-		fmt.Printf("receive ")
 		for i := range data[:n] {
-			fmt.Printf("%d", int(data[i]))
+			v := int(data[i])
+			if v == 255 {
+				fmt.Printf("receive ")
+				fmt.Printf("%d", v)
+				fmt.Printf(" from <%v>\n", conn.RemoteAddr())
+			}
 		}
-		fmt.Printf(" from <%v>\n", conn.RemoteAddr())
 	}
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
 	addr := &net.UDPAddr{IP: net.ParseIP("0.0.0.0"), Port: 9981}
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {

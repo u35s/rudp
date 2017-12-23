@@ -3,6 +3,7 @@ package rudp
 import (
 	"bytes"
 	"errors"
+	"log"
 )
 
 const (
@@ -54,7 +55,7 @@ type Package struct {
 }
 
 var corruptTick int = 5
-var expiredTick int = 5
+var expiredTick int = 1024
 var sendDelayTick int = 1
 
 func SetTick(corrupt, expired, sendDelay int) {
@@ -64,7 +65,9 @@ func SetTick(corrupt, expired, sendDelay int) {
 }
 
 func New() *Rudp {
-	return &Rudp{corruptTick: corruptTick, expiredTick: expiredTick, sendDelayTick: sendDelayTick}
+	return &Rudp{corruptTick: corruptTick, expiredTick: expiredTick, sendDelayTick: sendDelayTick,
+		addSendAgain: make(chan int, 1<<10),
+	}
 }
 
 type Rudp struct {
@@ -76,6 +79,7 @@ type Rudp struct {
 	sendHistory  messageQueue
 	sendFreeList messageQueue
 	sendAgain    array
+	addSendAgain chan int
 	sendID       int
 
 	corrupt TypeCorrupt
@@ -169,6 +173,7 @@ func (this *array) insert(id int) {
 	for j = this.len; j > i; j-- {
 		this.data[j] = this.data[j-1]
 	}
+	log.Printf("send again insert %v,cur %v,data len %v", i, this.len, len(this.data))
 	this.data[i] = id
 	this.len++
 }
@@ -273,12 +278,17 @@ type tmpBuffer struct {
 	tail *Package
 }
 
-func (this *Rudp) getID(bt1, bt2 byte) int {
+func (this *Rudp) getID(max int, bt1, bt2 byte) int {
 	n1, n2 := int(bt1), int(bt2)
 	id := n1*256 + n2
-	if id < this.recvIDMax-0x8000 {
+	id |= max & ^0xffff
+	if id < max-0x8000 {
+		log.Printf("id < max-0x8000 ,id %v max %v,cur %v",
+			id, max, id+0x10000)
 		id += 0x10000
-	} else if id > this.recvIDMax+0x8000 {
+	} else if id > max+0x8000 {
+		log.Printf("id > max+0x8000 ,id %v max %v,cur %v",
+			id, max, id-0x10000)
 		id -= 0x10000
 	}
 	return id
@@ -328,10 +338,12 @@ func (this *Rudp) Write(bts []byte) {
 				return
 			}
 			exe := this.addRequest
+			max := this.sendID
 			if len == TYPE_MISSING {
 				exe = this.addMissing
+				max = this.recvIDMax
 			}
-			exe(this.getID(bts[0], bts[1]))
+			exe(this.getID(max, bts[0], bts[1]))
 			bts = bts[2:]
 			sz -= 2
 		default:
@@ -340,7 +352,7 @@ func (this *Rudp) Write(bts []byte) {
 				this.corrupt = TYPE_CORRUPT_MSG_SIZE
 				return
 			}
-			this.insertMessage(this.getID(bts[0], bts[1]), bts[2:len+2])
+			this.insertMessage(this.getID(this.recvIDMax, bts[0], bts[1]), bts[2:len+2])
 			bts = bts[len+2:]
 			sz -= len + 2
 		}
@@ -407,23 +419,38 @@ func (this *Rudp) clearSendExpired() {
 	}
 }
 
-func (this *Rudp) addRequest(id int) { this.sendAgain.insert(id) }
-func (this *Rudp) addMissing(id int) { this.insertMessage(id, []byte{}) }
+func (this *Rudp) addRequest(id int) { this.addSendAgain <- id }
+func (this *Rudp) addMissing(id int) {
+	log.Printf("add missing %v", id)
+	this.insertMessage(id, []byte{})
+}
 
 func (this *Rudp) replyRequest(tmp *tmpBuffer) {
+out:
+	for {
+		select {
+		case add := <-this.addSendAgain:
+			this.sendAgain.insert(add)
+		default:
+			break out
+		}
+	}
 	history := this.sendHistory.head
 	for i := 0; i < this.sendAgain.len; i++ {
 		id := this.sendAgain.data[i]
 		if id < this.recvIDMin {
 			//already recv,ignore
+			log.Printf("already recv %v", id)
 			continue
 		}
 		for {
 			if history == nil || id < history.id {
 				//expired
+				log.Printf("send again miss %v", id)
 				packRequest(tmp, id, TYPE_MISSING)
 				break
 			} else if id == history.id {
+				log.Printf("send again %v", id)
 				packMessage(tmp, history)
 				break
 			}
@@ -432,6 +459,7 @@ func (this *Rudp) replyRequest(tmp *tmpBuffer) {
 	}
 	this.sendAgain.data = this.sendAgain.data[:0]
 	this.sendAgain.len = 0
+	this.sendAgain.cap = 0
 }
 
 func (this *Rudp) reqMissing(tmp *tmpBuffer) {
@@ -443,6 +471,7 @@ func (this *Rudp) reqMissing(tmp *tmpBuffer) {
 		}
 		if m.id > id {
 			for i := id; i < m.id; i++ {
+				log.Printf("req miss %v", i)
 				packRequest(tmp, i, TYPE_REQUEST)
 			}
 		}
