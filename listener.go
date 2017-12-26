@@ -7,9 +7,9 @@ import (
 
 func NewListener(conn *net.UDPConn) *RudpListener {
 	listen := &RudpListener{conn: conn,
-		newRudpUnConn: make(chan *RudpUnConn, 1024),
-		newRudpErr:    make(chan error, 12),
-		rudpUnConnMap: make(map[string]*RudpUnConn)}
+		newRudpConn: make(chan *RudpConn, 1024),
+		newRudpErr:  make(chan error, 12),
+		rudpConnMap: make(map[string]*RudpConn)}
 	go listen.run()
 	return listen
 }
@@ -18,9 +18,9 @@ type RudpListener struct {
 	conn *net.UDPConn
 	lock sync.RWMutex
 
-	newRudpUnConn chan *RudpUnConn
-	newRudpErr    chan error
-	rudpUnConnMap map[string]*RudpUnConn
+	newRudpConn chan *RudpConn
+	newRudpErr  chan error
+	rudpConnMap map[string]*RudpConn
 }
 
 //net listener interface
@@ -33,21 +33,21 @@ func (this *RudpListener) Addr() net.Addr { return this.conn.LocalAddr() }
 
 func (this *RudpListener) CloseRudp(addr string) {
 	this.lock.Lock()
-	delete(this.rudpUnConnMap, addr)
+	delete(this.rudpConnMap, addr)
 	this.lock.Unlock()
 }
 
 func (this *RudpListener) CloseAllRudp() {
 	this.lock.Lock()
-	for _, rconn := range this.rudpUnConnMap {
+	for _, rconn := range this.rudpConnMap {
 		rconn.closef = nil
 		rconn.Close()
 	}
 	this.lock.Unlock()
 }
-func (this *RudpListener) AcceptRudp() (*RudpUnConn, error) {
+func (this *RudpListener) AcceptRudp() (*RudpConn, error) {
 	select {
-	case c := <-this.newRudpUnConn:
+	case c := <-this.newRudpConn:
 		return c, nil
 	case e := <-this.newRudpErr:
 		return nil, e
@@ -63,17 +63,17 @@ func (this *RudpListener) run() {
 			return
 		}
 		this.lock.RLock()
-		rudpUnConn, ok := this.rudpUnConnMap[remoteAddr.String()]
+		rudpConn, ok := this.rudpConnMap[remoteAddr.String()]
 		this.lock.RUnlock()
 		if !ok {
-			rudpUnConn = NewUnConn(this.conn, remoteAddr, New(), this.CloseRudp)
+			rudpConn = NewUnConn(this.conn, remoteAddr, New(), this.CloseRudp)
 			this.lock.Lock()
-			this.rudpUnConnMap[remoteAddr.String()] = rudpUnConn
+			this.rudpConnMap[remoteAddr.String()] = rudpConn
 			this.lock.Unlock()
-			this.newRudpUnConn <- rudpUnConn
+			this.newRudpConn <- rudpConn
 		}
 		bts := make([]byte, n)
 		copy(bts, data[:n])
-		rudpUnConn.in <- bts
+		rudpConn.in <- bts
 	}
 }
