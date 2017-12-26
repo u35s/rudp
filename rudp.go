@@ -306,7 +306,7 @@ func (this *Rudp) checkMissing(direct bool) {
 		if !direct && last == 0 {
 			this.recvSkip[this.recvIDMin] = nano
 			dbg("miss start %v-%v,max %v", this.recvIDMin, head.id-1, this.recvIDMax)
-		} else if direct || last+1e8 < nano {
+		} else if direct || last+missingTime < nano {
 			delete(this.recvSkip, this.recvIDMin)
 			this.reqSendAgain <- [2]int{this.recvIDMin, head.id - 1}
 			dbg("req miss %v-%v,direct %v,wait num %v",
