@@ -32,13 +32,7 @@ func main() {
 				os.Exit(1)
 				break
 			}
-			time.Sleep(1e5)
-		}
-	}()
-	go func() {
-		for {
-			rconn.Tick <- 1
-			time.Sleep(1e6)
+			time.Sleep(1e9)
 		}
 	}()
 	signalChan := make(chan os.Signal, 1)

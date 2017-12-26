@@ -7,18 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/u35s/rudp"
 )
 
-func read(conn *rudp.RudpUnConn) {
-	go func() {
-		for {
-			conn.Tick <- 1
-			time.Sleep(1e6)
-		}
-	}()
+func read(conn *rudp.RudpConn) {
 	for {
 		data := make([]byte, rudp.MAX_PACKAGE)
 		n, err := conn.Read(data)
@@ -26,14 +19,12 @@ func read(conn *rudp.RudpUnConn) {
 			fmt.Printf("read err %s\n", err)
 			break
 		}
+		fmt.Printf("receive ")
 		for i := range data[:n] {
 			v := int(data[i])
-			if v == 255 {
-				fmt.Printf("receive ")
-				fmt.Printf("%d", v)
-				fmt.Printf(" from <%v>\n", conn.RemoteAddr())
-			}
+			fmt.Printf("%d", v)
 		}
+		fmt.Printf(" from <%v>\n", conn.RemoteAddr())
 	}
 }
 

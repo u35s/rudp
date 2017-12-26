@@ -12,11 +12,12 @@ func SetExpiredTick(tick int)   { expiredTick = tick }
 func SetSendDelayTick(tick int) { sendDelayTick = tick }
 
 //rudp conn
-var debug bool = true
+var debug bool = false
 var autoSend bool = true
 var sendTick time.Duration = 1e7
 var maxSendNumPerTick int = 500
 
+func SetDebug(d bool)                { debug = d }
 func SetAtuoSend(send bool)          { autoSend = send }
 func SetSendTick(tick time.Duration) { sendTick = tick }
 func SetMaxSendNumPerTick(n int)     { maxSendNumPerTick = n }

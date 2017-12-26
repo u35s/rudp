@@ -73,7 +73,7 @@ func main() {
 	udp.Send(t3)
 	udp.Send(t4)
 	dump(udp.Update(1)) //dump2
-	r1 := []byte{rudp.TYPE_REQUEST, 00, 00, rudp.TYPE_REQUEST, 00, 03}
+	r1 := []byte{rudp.TYPE_REQUEST, 00, 00, 00, 00, rudp.TYPE_REQUEST, 00, 03, 00, 03}
 	udp.Input(r1)
 	dump(udp.Update(1)) //dump3
 	dumpRecv(udp)
