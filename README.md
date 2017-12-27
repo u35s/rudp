@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/u35s/rudp.svg?branch=master)](https://travis-ci.org/u35s/rudp)
+[![Coverage Status](https://coveralls.io/repos/github/u35s/rudp/badge.svg)](https://coveralls.io/github/u35s/rudp)
 
 # rudp
 rudp采用请求回应机制,实现了UDP的可靠传输,即接收方检查是否丢失数据,然后向发送方请求丢失的数据,因此发送方必须保留已经发送过的数据一定时间来回应数据丢失。为了减小发送方数据保留量,在每收到n个包时通知发送方n之前的包已经收到可以清除了,另外超过设定的包超时时间后也会清除。
