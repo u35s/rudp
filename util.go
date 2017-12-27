@@ -19,11 +19,11 @@ func checkErr(err error) {
 
 func bitShow(n int) string {
 	var ext string = "byte"
-	if n > 1024 {
+	if n >= 1024 {
 		n /= 1024
 		ext = "Kb"
 	}
-	if n > 1024 {
+	if n >= 1024 {
 		n /= 1024
 		ext = "Mb"
 	}
