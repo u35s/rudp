@@ -131,7 +131,6 @@ func Test_RudpConn(t *testing.T) {
 	data := make([]byte, MAX_PACKAGE)
 	n, err := rconn.Read(data)
 	if err != nil {
-		t.Error(err)
 		return
 	}
 	if string(data[:n]) != string(send) {
