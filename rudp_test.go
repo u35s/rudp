@@ -6,7 +6,7 @@ import (
 )
 
 func Test_bitShow(t *testing.T) {
-	if show := bitShow(1023); show != "1023 byte" {
+	if show := bitShow(1023); show != "1023 b" {
 		t.Errorf("byte show error %v,show %v", 1023, show)
 	}
 
