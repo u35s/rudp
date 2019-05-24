@@ -44,113 +44,113 @@ type RudpConn struct {
 	in         chan []byte
 }
 
-func (this *RudpConn) SetDeadline(t time.Time) error      { return nil }
-func (this *RudpConn) SetReadDeadline(t time.Time) error  { return nil }
-func (this *RudpConn) SetWriteDeadline(t time.Time) error { return nil }
-func (this *RudpConn) LocalAddr() net.Addr                { return this.conn.LocalAddr() }
-func (this *RudpConn) Connected() bool                    { return this.remoteAddr == nil }
-func (this *RudpConn) RemoteAddr() net.Addr {
-	if this.remoteAddr != nil {
-		return this.remoteAddr
+func (rc *RudpConn) SetDeadline(t time.Time) error      { return nil }
+func (rc *RudpConn) SetReadDeadline(t time.Time) error  { return nil }
+func (rc *RudpConn) SetWriteDeadline(t time.Time) error { return nil }
+func (rc *RudpConn) LocalAddr() net.Addr                { return rc.conn.LocalAddr() }
+func (rc *RudpConn) Connected() bool                    { return rc.remoteAddr == nil }
+func (rc *RudpConn) RemoteAddr() net.Addr {
+	if rc.remoteAddr != nil {
+		return rc.remoteAddr
 	}
-	return this.conn.RemoteAddr()
+	return rc.conn.RemoteAddr()
 }
-func (this *RudpConn) Close() error {
+func (rc *RudpConn) Close() error {
 	var err error
-	if this.remoteAddr != nil {
-		if this.closef != nil {
-			this.closef(this.remoteAddr.String())
+	if rc.remoteAddr != nil {
+		if rc.closef != nil {
+			rc.closef(rc.remoteAddr.String())
 		}
-		_, err = this.conn.WriteToUDP([]byte{TYPE_CORRUPT}, this.remoteAddr)
-		this.in <- []byte{TYPE_EOF}
+		_, err = rc.conn.WriteToUDP([]byte{TYPE_CORRUPT}, rc.remoteAddr)
+		rc.in <- []byte{TYPE_EOF}
 	} else {
-		_, err = this.conn.Write([]byte{TYPE_CORRUPT})
+		_, err = rc.conn.Write([]byte{TYPE_CORRUPT})
 	}
 	checkErr(err)
 	return err
 }
-func (this *RudpConn) Read(bts []byte) (n int, err error) {
+func (rc *RudpConn) Read(bts []byte) (n int, err error) {
 	select {
-	case data := <-this.recvChan:
+	case data := <-rc.recvChan:
 		copy(bts, data)
 		return len(data), nil
-	case err := <-this.recvErr:
+	case err := <-rc.recvErr:
 		return 0, err
 	}
 }
 
-func (this *RudpConn) send(bts []byte) (err error) {
+func (rc *RudpConn) send(bts []byte) (err error) {
 	select {
-	case this.sendChan <- bts:
+	case rc.sendChan <- bts:
 		return nil
-	case err := <-this.sendErr:
+	case err := <-rc.sendErr:
 		return err
 	}
 }
-func (this *RudpConn) Write(bts []byte) (n int, err error) {
+func (rc *RudpConn) Write(bts []byte) (n int, err error) {
 	sz := len(bts)
 	for len(bts)+MAX_MSG_HEAD > GENERAL_PACKAGE {
-		if err := this.send(bts[:GENERAL_PACKAGE-MAX_MSG_HEAD]); err != nil {
+		if err := rc.send(bts[:GENERAL_PACKAGE-MAX_MSG_HEAD]); err != nil {
 			return 0, err
 		}
 		bts = bts[GENERAL_PACKAGE-MAX_MSG_HEAD:]
 	}
-	return sz, this.send(bts)
+	return sz, rc.send(bts)
 }
 
-func (this *RudpConn) rudpRecv(data []byte) error {
+func (rc *RudpConn) rudpRecv(data []byte) error {
 	for {
-		n, err := this.rudp.Recv(data)
+		n, err := rc.rudp.Recv(data)
 		if err != nil {
-			this.recvErr <- err
+			rc.recvErr <- err
 			return err
 		} else if n == 0 {
 			break
 		}
 		bts := make([]byte, n)
 		copy(bts, data[:n])
-		this.recvChan <- bts
+		rc.recvChan <- bts
 	}
 	return nil
 }
-func (this *RudpConn) conectedRecvLoop() {
+func (rc *RudpConn) conectedRecvLoop() {
 	data := make([]byte, MAX_PACKAGE)
 	for {
-		n, err := this.conn.Read(data)
+		n, err := rc.conn.Read(data)
 		if err != nil {
-			this.recvErr <- err
+			rc.recvErr <- err
 			return
 		}
-		this.rudp.Input(data[:n])
-		if this.rudpRecv(data) != nil {
+		rc.rudp.Input(data[:n])
+		if rc.rudpRecv(data) != nil {
 			return
 		}
 	}
 }
-func (this *RudpConn) unconectedRecvLoop() {
+func (rc *RudpConn) unconectedRecvLoop() {
 	data := make([]byte, MAX_PACKAGE)
 	for {
 		select {
-		case bts := <-this.in:
-			this.rudp.Input(bts)
-			if this.rudpRecv(data) != nil {
+		case bts := <-rc.in:
+			rc.rudp.Input(bts)
+			if rc.rudpRecv(data) != nil {
 				return
 			}
 		}
 	}
 }
-func (this *RudpConn) sendLoop() {
+func (rc *RudpConn) sendLoop() {
 	var sendNum int
 	for {
 		select {
-		case tick := <-this.SendTick:
+		case tick := <-rc.SendTick:
 		sendOut:
 			for {
 				select {
-				case bts := <-this.sendChan:
-					_, err := this.rudp.Send(bts)
+				case bts := <-rc.sendChan:
+					_, err := rc.rudp.Send(bts)
 					if err != nil {
-						this.sendErr <- err
+						rc.sendErr <- err
 						return
 					}
 					sendNum++
@@ -162,17 +162,17 @@ func (this *RudpConn) sendLoop() {
 				}
 			}
 			sendNum = 0
-			p := this.rudp.Update(tick)
+			p := rc.rudp.Update(tick)
 			var num, sz int
 			for p != nil {
 				n, err := int(0), error(nil)
-				if this.Connected() {
-					n, err = this.conn.Write(p.Bts)
+				if rc.Connected() {
+					n, err = rc.conn.Write(p.Bts)
 				} else {
-					n, err = this.conn.WriteToUDP(p.Bts, this.remoteAddr)
+					n, err = rc.conn.WriteToUDP(p.Bts, rc.remoteAddr)
 				}
 				if err != nil {
-					this.sendErr <- err
+					rc.sendErr <- err
 					return
 				}
 				sz, num = sz+n, num+1
@@ -181,29 +181,29 @@ func (this *RudpConn) sendLoop() {
 			if num > 1 {
 				show := bitShow(sz * int(time.Second/sendTick))
 				dbg("send package num %v,sz %v, %v/s,local %v,remote %v",
-					num, show, show, this.LocalAddr(), this.RemoteAddr())
+					num, show, show, rc.LocalAddr(), rc.RemoteAddr())
 			}
 		}
 	}
 }
-func (this *RudpConn) run() {
+func (rc *RudpConn) run() {
 	if autoSend && sendTick > 0 {
 		go func() {
 			tick := time.Tick(sendTick)
 			for {
 				select {
 				case <-tick:
-					this.SendTick <- 1
+					rc.SendTick <- 1
 				}
 			}
 		}()
 	}
 	go func() {
-		if this.Connected() {
-			this.conectedRecvLoop()
+		if rc.Connected() {
+			rc.conectedRecvLoop()
 		} else {
-			this.unconectedRecvLoop()
+			rc.unconectedRecvLoop()
 		}
 	}()
-	this.sendLoop()
+	rc.sendLoop()
 }
